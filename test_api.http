@@ -1,0 +1,75 @@
+# Test Sigmora Notification Service FastAPI endpoints
+# Base URL: http://127.0.0.1:8000
+# Ensure the API is running with `docker-compose up` before executing tests
+
+# Root endpoint
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+###
+
+# Hello endpoint with user parameter
+GET http://127.0.0.1:8000/hello/User
+Accept: text/html
+
+###
+
+# Subscribe a new user
+POST http://127.0.0.1:8000/subscribe
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "securepassword",
+  "subscribed": true,
+  "preferences": {
+    "topics": ["tech"],
+    "priority": ["high"],
+    "category": ["alert"],
+    "release_time": []
+  }
+}
+
+###
+
+# Get JWT token for authentication
+POST http://127.0.0.1:8000/get-token
+Content-Type: application/x-www-form-urlencoded
+
+username=test@example.com&password=securepassword
+
+@access_token = {{response.access_token}}
+
+###
+
+# Update user preferences (requires JWT token)
+POST http://127.0.0.1:8000/preferences
+Content-Type: application/json
+Authorization: Bearer {{access_token}}
+
+{
+  "topics": ["tech", "news"],
+  "priority": ["high", "low"],
+  "category": ["alert", "update"],
+  "release_time": []
+}
+
+###
+
+# Get user notifications (requires JWT token)
+GET http://127.0.0.1:8000/notifications
+Authorization: Bearer {{access_token}}
+Accept: application/json
+
+###
+
+# Get active subscribers count
+GET http://127.0.0.1:8000/stats
+Accept: application/json
+
+###
+
+# Unsubscribe user (requires JWT token)
+POST http://127.0.0.1:8000/unsubscribe
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
