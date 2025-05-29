@@ -1,18 +1,20 @@
 FROM python:3.13-slim
-# Install uv
+
+# Установка uv
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Copy pyproject.toml for dependency installation
+# Копирование pyproject.toml для установки зависимостей
 COPY pyproject.toml .
 
-# Install dependencies and verify python-multipart
+# Установка зависимостей и проверка python-multipart и aiosmtplib
 RUN uv pip install --system . && \
-    pip show python-multipart || (echo "python-multipart not installed" && exit 1)
+    pip show python-multipart || (echo "python-multipart не установлен" && exit 1) && \
+    pip show aiosmtplib || (echo "aiosmtplib не установлен" && exit 1)
 
-# Copy the rest of the code
+# Копирование остального кода
 COPY . .
 
-# Default command (overridden in docker-compose.yaml)
+# Команда по умолчанию (переопределяется в docker-compose.yaml)
 CMD ["uv", "run", "--no-project", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

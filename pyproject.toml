@@ -3,7 +3,7 @@ name = "sigmora"
 version = "0.1.0"
 description = "A scalable notification service with FastAPI, MongoDB, and Celery"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<=3.13"  # Обновлено для поддержки Python 3.13
 license = {text = "MIT"}
 authors = [
     {name = "GendByteMaster", email = "GendByteMaster@gmail.com"}
@@ -18,6 +18,7 @@ dependencies = [
     "python-multipart==0.0.12",
     "celery==5.4.0",
     "redis==5.0.8",
+    "aiosmtplib==3.0.2",  # Для асинхронной отправки email
 ]
 
 [project.scripts]

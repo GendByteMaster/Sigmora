@@ -1,6 +1,6 @@
 # Sigmora Notification Service
 
-Sigmora (Scalable, Intelligent, Modular Notification Architecture) — это масштабируемый сервис уведомлений, построенный на FastAPI, MongoDB и Celery. Он позволяет пользователям подписываться и отписываться от уведомлений, настраивать предпочтения (темы, время отправки, приоритет, категории) и получать персонализированные уведомления. Сервис контейнеризован с помощью Docker Compose и использует `uv` для эффективного управления зависимостями и выполнения команд.
+Sigmora (Scalable, Intelligent, Modular Notification Architecture) — это масштабируемый сервис уведомлений, построенный на FastAPI, MongoDB и Celery. Он позволяет пользователям подписываться и отписываться от уведомлений, настраивать предпочтения (темы, время отправки, приоритет, категории) и получать персонализированные уведомления по email. Сервис контейнеризован с помощью Docker Compose и использует `uv` для эффективного управления зависимостями и выполнения команд.
 
 **Репозиторий**: [https://github.com/GendByteMaster/](https://github.com/GendByteMaster/)
 
@@ -9,11 +9,12 @@ Sigmora (Scalable, Intelligent, Modular Notification Architecture) — это м
 - **Управление подпиской**: Подписка и отписка пользователей через REST API.
 - **Настраиваемые предпочтения**: Фильтрация уведомлений по темам (например, технологии, спорт), приоритетам (низкий, средний, высокий), категориям (общее, оповещение, обновление) и времени отправки.
 - **Статистика**: Получение количества активных подписчиков.
-- **Периодические уведомления**: Генерация случайных уведомлений каждые 60 секунд с помощью Celery.
+- **Периодические уведомления**: Генерация случайных уведомлений каждые 60 секунд с помощью Celery и отправка по email.
 - **Аутентификация**: Безопасный доступ к API с использованием JWT.
 - **Масштабируемость**: Поддержка горизонтального масштабирования с репликацией MongoDB и воркерами Celery.
 - **Контейнеризация**: Развертывание с Docker Compose, включая сервисы FastAPI, MongoDB, Redis, Celery worker и Celery Beat.
 - **Управление зависимостями**: Использование `uv` для быстрой и воспроизводимой установки зависимостей.
+- **Email-уведомления**: Отправка уведомлений по электронной почте с использованием `aiosmtplib`.
 
 ## Структура проекта
 
@@ -24,7 +25,7 @@ sigmora/
 ├── database.py            # Настройка подключения к MongoDB
 ├── auth.py                # Аутентификация JWT и хеширование паролей
 ├── routes.py              # Эндпоинты API
-├── tasks.py               # Задачи Celery для генерации уведомлений
+├── tasks.py               # Задачи Celery для генерации и отправки уведомлений
 ├── config.py              # Конфигурация и переменные окружения
 ├── Dockerfile             # Конфигурация Docker-образа
 ├── docker-compose.yaml    # Конфигурация Docker Compose
@@ -37,7 +38,7 @@ sigmora/
 ## Требования
 
 - **Docker** и **Docker Compose** (для контейнеризированного развертывания).
-- **Python 3.9+** (для локальной разработки без Docker).
+- **Python 3.13** (для локальной разработки без Docker).
 - **uv** (устанавливается через `pip install uv` для управления зависимостями).
 - MongoDB и Redis (управляются Docker Compose в стандартной конфигурации).
 
@@ -52,7 +53,7 @@ sigmora/
    ```
 
 2. **Создайте файл `.env`**:
-   Скопируйте `.env.example` в `.env` и задайте безопасный `SECRET_KEY`:
+   Скопируйте `.env.example` в `.env` и задайте безопасный `SECRET_KEY` и SMTP-учетные данные:
    ```bash
    cp .env.example .env
    ```
@@ -61,6 +62,11 @@ sigmora/
    SECRET_KEY=your-secure-secret-key
    MONGO_URI=mongodb://mongo:27017
    CELERY_BROKER_URL=redis://redis:6379/0
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASSWORD=your-app-password
+   SMTP_FROM=no-reply@sigmora.com
    ```
 
 3. **Соберите и запустите**:
@@ -107,6 +113,11 @@ sigmora/
    export MONGO_URI=mongodb://localhost:27017
    export CELERY_BROKER_URL=redis://localhost:6379/0
    export SECRET_KEY=your-secure-secret-key
+   export SMTP_HOST=smtp.gmail.com
+   export SMTP_PORT=587
+   export SMTP_USER=your-email@gmail.com
+   export SMTP_PASSWORD=your-app-password
+   export SMTP_FROM=no-reply@sigmora.com
    ```
 
 5. **Запустите MongoDB и Redis**:
@@ -146,19 +157,19 @@ sigmora/
      "email": "user@example.com",
      "password": "securepassword",
      "subscribed": true,
-     "preferences": {"topic": ["tech"], "priority": ["high"], "category": ["alert"]}
+     "preferences": {"topics": ["tech"], "priority": ["high"], "category": ["alert"]}
    }'
    ```
 
 2. **Получение JWT-токена**:
    ```bash
-   curl -X POST "http://localhost:8000/token" -d "username=user@example.com&password=securepassword"
+   curl -X POST "http://localhost:8000/token" -H "Content-Type: application/x-www-form-urlencoded" -d "username=user@example.com&password=securepassword"
    ```
 
 3. **Обновление предпочтений**:
    ```bash
    curl -X POST "http://localhost:8000/preferences" -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{
-     "topic": ["tech", "news"],
+     "topics": ["tech", "news"],
      "priority": ["high", "medium"],
      "category": ["alert", "update"]
    }'
@@ -169,15 +180,44 @@ sigmora/
    curl -X GET "http://localhost:8000/notifications" -H "Authorization: Bearer <token>"
    ```
 
-## Генерация уведомлений
+## Генерация и отправка уведомлений
 
 - Уведомления генерируются каждые 60 секунд задачей Celery (`generate_and_send_notification`).
 - Каждое уведомление содержит случайные параметры:
-  - `topic`: технологии, спорт, новости
+  - `topics`: технологии, спорт, новости
   - `priority`: низкий, средний, высокий
   - `category`: общее, оповещение, обновление
   - `release_time`: текущая метка времени
-- Уведомления отправляются пользователям, чьи предпочтения соответствуют параметрам, и сохраняются в MongoDB с идентификаторами получателей для предотвращения дублирования.
+- Уведомления отправляются по email пользователям, чьи предпочтения соответствуют параметрам, и сохраняются в MongoDB с идентификаторами получателей для предотвращения дублирования.
+
+## Настройка Email-уведомлений
+
+1. **Настройте SMTP в `.env`**:
+   Укажите параметры SMTP-сервера (например, Gmail):
+   ```env
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASSWORD=your-app-password
+   SMTP_FROM=no-reply@sigmora.com
+   ```
+   Для Gmail используйте **App Password** (настройки Google Account > Безопасность > Пароли приложений).
+
+2. **Пересоберите проект**:
+   ```bash
+   docker-compose build --no-cache
+   docker-compose up
+   ```
+
+3. **Проверьте отправку**:
+   Уведомления отправляются каждые 60 секунд. Проверьте логи Celery:
+   ```bash
+   docker-compose logs celery
+   ```
+   Ожидаемый вывод:
+   ```
+   Email успешно отправлен на user@example.com
+   ```
 
 ## Разработка и тестирование
 
@@ -207,7 +247,7 @@ sigmora/
            "email": "test@example.com",
            "password": "testpassword",
            "subscribed": True,
-           "preferences": {"topic": ["tech"], "priority": ["high"]}
+           "preferences": {"topics": ["tech"], "priority": ["high"]}
        })
        assert response.status_code == 200
        assert response.json() == {"message": "Subscribed successfully"}
@@ -220,6 +260,7 @@ sigmora/
 - **Безопасность**: JWT-аутентификация и хеширование паролей с помощью bcrypt. Используйте безопасный `SECRET_KEY` в `.env` для продакшена.
 - **Надежность**: Healthchecks в `docker-compose.yaml` гарантируют готовность MongoDB и Redis перед запуском зависимых сервисов.
 - **Хранение данных**: MongoDB хранит пользователей и уведомления в отдельных коллекциях с массивом предпочтений для эффективной фильтрации.
+- **Email-уведомления**: Асинхронная отправка писем через `aiosmtplib` для высокой производительности.
 
 ## Устранение неполадок
 
@@ -227,12 +268,16 @@ sigmora/
 - **MongoDB/Redis не готовы**: Healthchecks обеспечивают правильный порядок запуска. Проверьте логи: `docker-compose logs mongo` или `docker-compose logs redis`.
 - **Проблемы сборки**: Очистите кэш: `docker-compose build --no-cache`.
 - **Ошибки аутентификации**: Убедитесь, что `SECRET_KEY` одинаков для всех сервисов и токены действительны.
+- **Ошибки отправки email**: Проверьте SMTP-учетные данные в `.env`. Для Gmail используйте App Password. Тестируйте SMTP:
+  ```bash
+  docker exec -it sigmora-celery-1 python -c "import asyncio, aiosmtplib; from email.mime.text import MIMEText; async def test(): await aiosmtplib.send(MIMEText('Test'), hostname='smtp.gmail.com', port=587, username='your-email@gmail.com', password='your-app-password', use_tls=True, sender='no-reply@sigmora.com', recipients=['test@example.com']); asyncio.run(test())"
+  ```
+- **Совместимость с Python 3.13**: Если зависимости вызывают ошибки, обновите их в `pyproject.toml` (например, `motor==3.7.0`) и пересоберите проект.
 - **Файловая система Windows**: Убедитесь, что Docker Desktop имеет доступ к `G:\Repository\Sigmora` в настройках "Общий доступ к файлам".
 
 ## Планы на будущее
 
 - **Ограничение скорости**: Добавить `slowapi` для ограничения скорости API.
-- **Уведомления по email**: Интеграция с SendGrid для отправки email.
 - **Админ-панель**: Разработка веб-интерфейса для управления пользователями и уведомлениями.
 - **Мониторинг**: Использование Prometheus/Grafana для метрик и логирования.
 - **Поддержка нескольких языков**: Хранение содержимого уведомлений на разных языках.
